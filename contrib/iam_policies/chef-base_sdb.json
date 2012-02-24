@@ -1,0 +1,20 @@
+{
+  "Statement": [
+    {
+      "Sid": "Stmt1329950026733",
+      "Action": [
+        "sdb:BatchDeleteAttributes",
+        "sdb:BatchPutAttributes",
+        "sdb:CreateDomain",
+        "sdb:DeleteAttributes",
+        "sdb:DomainMetadata",
+        "sdb:GetAttributes",
+        "sdb:PutAttributes",
+        "sdb:Select"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:aws:sdb:*::domain/chef"
+    }
+  ]
+}
+

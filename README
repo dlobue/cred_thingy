@@ -1,0 +1,23 @@
+cred_thingy's primary purpose is to securely put credentials on new servers in an automated fashion.
+
+
+
+Security features include:
+-Giving every instance its own unique aws api credentials.
+-Limiting the permissions of the aws api credentials given to each instance to only what's necessary for them to do their job.
+-Deleting aws api credentials for terminating servers immediately.
+-Nothing is served by the cred_thingy daemon or server (since these servers will have the most access to our AWS account). an old security adage is: the only computer that is truely secure from network intrusions is one not connected to any network. by avoiding use of any network services on these servers we get about as close to that old adage as possible.
+-Credentials cannot be requested. cred_thingy finds out about new instances from an outside source we can trust (well, have no choice but to trust) - AWS.
+-Credentials are encrypted in a manner that they can only be decrypted by the ec2 instance they are intended for.
+-Credentials are not pushed onto new instances (which requires far more access and permissions than it sounds. it is a massive liability that can be easily subverted).
+-S3 is used as a secure and reliable intermediary store - cred_thingy pushes encrypted creds to s3, and new instance downloads encrypted creds from s3.
+-No shared secrets used (ie- no passwords). Baking passwords to the credential server into initial setup scripts makes those passwords easy to compromise, and very difficult to update.
+
+
+
+
+
+cred_thingy is still under heavy development, and frankly doesn't work yet.
+
+more to come.
+

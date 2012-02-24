@@ -1,0 +1,9 @@
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "EC2:CreateTags",
+      "Resource": "*"
+    }
+  ]
+}
