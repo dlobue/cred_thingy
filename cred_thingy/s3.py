@@ -5,8 +5,8 @@ from pprint import pformat
 import sys
 from threading import Lock
 from time import time
+import json
 import logging
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,75 +82,59 @@ class cred_bucket(object):
         return "arn:aws:s3:::" + self.name + path_prefix
 
 
+    def _new_policy(self):
+        return dict(
+                Version=self.policy_version,
+                Statement=[],
+            )
+
     def _get_policy(self):
         #TODO: need to ensure we have lock before running this
         logger.debug("Getting s3 bucket policy for bucket %s" % self.name)
         try:
-            r = self._bucket.get_policy()
-            logger.debug("Found the bucket policy for bucket %s" % self.name)
+            p = self._bucket.get_policy()
+            return json.loads(p)
         except boto.exception.S3ResponseError:
             logger.debug("No bucket policy for bucket %s found! creating a new policy from scratch!")
-            r =  dict(
-                Version=self.policy_version,
-                Statement=[],
-            )
-        self.__policy = r #XXX: should i?
-        return r
+            return self._new_policy()
 
-    def _set_policy(self):
-        logger.debug("merging updated policy statement with existing bucket policy")
-        policy = self.__policy
-        statement = self.__statement
-        if statement not in policy['Statement']:
-            policy['Statement'].append(statement)
+    def _find_statement(self, policy):
+        """
+        finds the credential access policy statement, or creates it if
+        it doesn't exist yet.
+        """
 
-        logger.debug("uploading the new bucket policy to s3.")
-        self._bucket.set_policy(policy)
-        self.__policy = self.__statement = None
-
-
-
-    def _find_statement(self):
         #TODO: need to ensure we have lock before running this
         logger.debug("finding the cred_thingy policy statement %s and separating it from the policy for modifications." % self.policy_statement_id)
-        if hasattr(self, '__policy') and self.__policy is not None:
-            policy = self.__policy
-        else:
-            policy = self._get_policy()
 
         statements = policy['Statement']
         sid = self.policy_statement_id
 
-        found = [s for s in statements if s['Sid'] == sid]
-        assert len(found) < 2, "Found multiple policy statements with the same Sid (%s) on aws! statements: %s" % (sid, pformat(found))
+        for statement in statements:
+            if statement['Sid'] == sid:
+                logger.debug("Found the existing cred_thingy policy statement: %s" % pformat(statement))
+                #TODO: ensure the policy statement contains all required elements
+                return statement
 
-        try:
-            s = statements.pop(statements.index(found[0]))
-            logger.debug("Found the existing cred_thingy policy statement: %s" % pformat(s))
-        except IndexError:
-            logger.debug("No existing cred_thingy policy statement found. creating a new one")
-            s = {
-                "Sid": sid,
-                "Effect": "Allow",
-                "Principal": { "AWS": "*" },
-                "Action": "s3:GetObject",
-                "Resource": self.arn,
-                "Condition": {
-                    "IpAddress": {
-                        "aws:SourceIp": []
-                    }
+        logger.debug("No existing cred_thingy policy statement found. creating a new one")
+        s = {
+            "Sid": sid,
+            "Effect": "Allow",
+            "Principal": { "AWS": "*" },
+            "Action": "s3:GetObject",
+            "Resource": self.arn,
+            "Condition": {
+                "IpAddress": {
+                    "aws:SourceIp": []
                 }
             }
-        self.__statement = s
+        }
+        policy['Statement'].append(s)
         return s
 
-    def _allow_ip(self, source_ip):
+    def _allow_ip(self, source_ip, policy):
         #TODO: need to ensure we have lock before running this
-        if hasattr(self, '__statement') and self.__statement is not None:
-            statement = self.__statement
-        else:
-            statement = self._find_statement()
-
+        statement = self._find_statement(policy)
         source_ips = statement['Condition']['IpAddress']['aws:SourceIp']
 
         if '/' in source_ip:
@@ -168,12 +152,17 @@ class cred_bucket(object):
 
             self._metadata.create_ttl_record(source_ip)
 
-        return statement
+        return policy
 
     def allow_ip(self, source_ip):
         logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
-        self._allow_ip(source_ip)
-        self._set_policy()
+        policy = self._get_policy()
+        self._allow_ip(source_ip, policy)
+        self.update_policy(policy)
+
+    def update_policy(self, policy):
+        logger.debug("uploading the new bucket policy to s3.")
+        return self._bucket.set_policy(json.dumps(policy))
 
 
     def rectify(self):
@@ -183,14 +172,15 @@ class cred_bucket(object):
 
     def clean(self):
         #TODO: need to ensure we have lock before running this
-        if hasattr(self, '__statement') and self.__statement is not None:
-            statement = self.__statement
-        else:
-            statement = self._find_statement()
+        policy = self._get_policy()
+        self._clean(policy, delete=True)
+        self.update_policy(policy)
 
+    def _clean(self, policy, delete=False):
+        statement = self._find_statement(policy)
         source_ips = statement['Condition']['IpAddress']['aws:SourceIp']
 
-        for source_ip in self._metadata.iter_stale_ips(delete=True):
+        for source_ip in self._metadata.iter_stale_ips(delete=delete):
             if source_ip in source_ips:
                 logger.info("removing stale source_ip address from bucket policy", source_ip)
                 del source_ips[source_ips.index(source_ip)]
@@ -256,7 +246,6 @@ class policy_metadata(object):
         #XXX: should we acquire the shared lock first, or the process lock?
         self._lock.acquire()
         self.acquire_shared_lock()
-        #XXX: should we make sure __policy and __statement are empty?
 
     def _release(self):
         self.release_shared_lock()
