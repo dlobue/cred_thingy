@@ -185,17 +185,15 @@ class cred_bucket(object):
                 logger.info("removing stale source_ip address from bucket policy", source_ip)
                 del source_ips[source_ips.index(source_ip)]
 
+        return policy
+
+
+
     def upload_creds(self, instance_id, encrypted_creds):
         key_name = self.path_prefix.strip('/*') + '/' + instance_id
         logger.info("Uploading credential file using key name '%s' for instance %s" % (key_name, instance_id))
         s3key = self._bucket.new_key(key_name)
-        s3key.set_contents_from_string(encrypted_creds, reduced_redundancy=True)
-
-
-
-
-
-
+        return s3key.set_contents_from_string(encrypted_creds, reduced_redundancy=True)
 
 
 class policy_metadata(object):
