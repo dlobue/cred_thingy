@@ -27,7 +27,7 @@ class runner(object):
     def _get_queue(self):
         queue = self._sqsconn.get_queue(self.queue_name)
         if queue is None:
-            #TODO: figure out how to handle missing sqs queue.
+            #TODO: determine how best to handle missing sqs queue.
             print "queue not found."
             sys.exit(1)
             #queue = sqsconn.create_queue(queue_name, 60)
@@ -61,6 +61,10 @@ class runner(object):
     def on_instance_launch(self, message):
         instance_id = message.Message['EC2InstanceId']
         logger.debug("Notified of instance launch for instance %s." % instance_id)
+        self.create_creds(instance_id)
+        message.delete()
+
+    def create_creds(self, instance_id):
         instance = self._ec2conn.get_all_instances([instance_id])[0].instances[0]
 
         creds = self.user_manager.create_instance_user(instance_id)
@@ -69,8 +73,6 @@ class runner(object):
 
         self.bucket.upload_creds(encrypted_creds)
         self.bucket.allow_ip(instance.ip_address)
-
-        message.delete()
 
     def on_instance_terminate(self, message):
         instance_id = message.Message['EC2InstanceId']
