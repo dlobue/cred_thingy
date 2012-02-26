@@ -63,10 +63,17 @@ class user_manager(object):
         logger.info("Creating iam user and access keys for ec2 instances %s" % instance_id)
         iamconn = self._iamconn
         chef_attribs = get_chef_attribs(instance_id)
-        result = iamconn.create_user(instance_id, '/cred_thingy/%s/' % chef_attribs['deployment'])
+        if chef_attribs is None:
+            traits = []
+            deployment = 'no_deployment'
+        else:
+            traits = chef_attribs.get('traits', [])
+            traits = chef_attribs.get('deployment', 'no_deployment')
+
+        result = iamconn.create_user(instance_id, '/cred_thingy/%s/' % deployment)
         #TODO: check result to ensure user was created successfully
 
-        for group in self.iter_applicable_groups(chef_attribs['traits']):
+        for group in self.iter_applicable_groups(traits):
             logger.debug("Adding iam user for instance %s to iam group %s" % (instance_id, group))
             iamconn.add_user_to_group(group, instance_id)
 

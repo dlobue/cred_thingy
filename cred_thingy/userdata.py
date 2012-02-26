@@ -25,7 +25,12 @@ def preprocess_userdata(data):
 def _get_chef_attribs(parts):
     logger.debug("Locating chef-attribs part from userdata and then loading the json")
     attribs_header = '#chef-attribs\n'
-    chef_attribs = parts['content'][parts['types'].index('text/chef-attribs')]
+    try:
+        chef_attribs_idx = parts['types'].index('text/chef-attribs')
+    except ValueError:
+        return None
+
+    chef_attribs = parts['content'][chef_attribs_idx]
 
     if chef_attribs.startswith(attribs_header):
         chef_attribs = chef_attribs[len(attribs_header):]
