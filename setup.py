@@ -17,9 +17,9 @@ setup(name='cred_thingy',
       include_package_data=True,
       zip_safe=False,
       install_requires=[
-          "gevent>=0.13.6",
           "paramiko",
           "boto>=2.0rc1",
+          "xtraceback",
       ],
       entry_points="""
       # -*- Entry points: -*-
