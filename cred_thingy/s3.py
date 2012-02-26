@@ -135,7 +135,11 @@ class cred_bucket(object):
     def _allow_ip(self, source_ip, policy):
         #TODO: need to ensure we have lock before running this
         statement = self._find_statement(policy)
-        source_ips = statement['Condition']['IpAddress']['aws:SourceIp']
+        source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
+        if not isinstance(source_ips, list):
+            source_ips = [source_ips]
+            statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
+
 
         if '/' in source_ip:
             try:
@@ -178,7 +182,10 @@ class cred_bucket(object):
 
     def _clean(self, policy, delete=False):
         statement = self._find_statement(policy)
-        source_ips = statement['Condition']['IpAddress']['aws:SourceIp']
+        source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
+        if not isinstance(source_ips, list):
+            source_ips = [source_ips]
+            statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
 
         for source_ip in self._metadata.iter_stale_ips(delete=delete):
             if source_ip in source_ips:
@@ -203,7 +210,13 @@ class policy_metadata(object):
         self.domain_name = domain_name
         self.lock_key = lock_key
         self._conn = boto.connect_sdb()
-        self._domain = self._conn.get_domain(domain_name)
+        try:
+            self._domain = self._conn.get_domain(domain_name)
+        except boto.exception.SDBResponseError, e:
+            if e.status == 400 and e.error_code == u'NoSuchDomain':
+                self._conn.create_domain(domain_name)
+            else:
+                raise e
 
     def create_ttl_record(self, source_ip):
         now = time()

@@ -24,6 +24,18 @@ def get_host_key(host, port=22):
 def encrypt_data(pubkey, data):
     logger.debug("Encrypting credentials using ssh public key. shhhhhhh!")
     rsa = RSA.construct((long(pubkey.n), long(pubkey.e)))
-    return rsa.encrypt(data, uuid4().hex)
+    return rsa.encrypt(data, uuid4().hex)[0]
 
+
+def load_pubkey():
+    import base64, paramiko
+    pubkeyfh = open('/etc/ssh/ssh_host_rsa_key.pub', 'r')
+    pubkeydata = pubkeyfh.read()
+    return paramiko.RSAKey(data=base64.decodestring(pubkeydata.split()[1]))
+
+def decrypt_data(encrypteddata):
+    import paramiko
+    hostprivkey = paramiko.RSAKey(filename='/etc/ssh/ssh_host_rsa_key')
+    rsapriv = RSA.construct((long(hostprivkey.n), long(hostprivkey.e), long(hostprivkey.d)))
+    return rsapriv.decrypt(encrypteddata)
 

@@ -43,6 +43,8 @@ def _get_chef_attribs(parts):
 def get_chef_attribs(instance_id):
     logger.info("Getting instance-specific chef configuration for instance %s from instance userdata." % instance_id)
     ud = get_instance_userdata(instance_id)
+    if ud is None:
+        return None
     udp = preprocess_userdata(ud)
     return _get_chef_attribs(udp)
 

@@ -7,6 +7,8 @@ import boto
 from cred_thingy.userdata import get_chef_attribs
 
 
+class AlreadyDeleted(Exception): pass
+
 
 class user_manager(object):
     default_groups = ['base']
@@ -47,10 +49,26 @@ class user_manager(object):
             logger.debug("Deleting access key id %s from for instance %s" % (access_key, instance_id))
             self._iamconn.delete_access_key(access_key, instance_id)
 
+    def _delete_instance_groups(self, instance_id):
+        resp = self._iamconn.get_groups_for_user(instance_id)
+        groups = resp[u'list_groups_for_user_response'][u'list_groups_for_user_result'][u'groups']
+
+        for group in groups:
+            logger.debug("Removing instance user %s from groups %s" % (instance_id, group[u'group_name']))
+            self._iamconn.remove_user_from_group(group[u'group_name'], instance_id)
+
     def delete_instance_user(self, instance_id):
         logger.info("Deleting iam user for ec2 instance %s" % instance_id)
-        self._delete_instance_access_keys(instance_id)
+        try:
+            self._delete_instance_access_keys(instance_id)
+        except boto.exception.BotoServerError, e:
+            if e.status == 404 and e.error_code == u'NoSuchEntity':
+                return None
+            else:
+                raise e
+        self._delete_instance_groups(instance_id)
         self._iamconn.delete_user(instance_id)
+        logger.debug("User for ec2 instance %s deleted" % instance_id)
 
 
     def _create_instance_creds(self, instance_id):

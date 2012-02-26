@@ -1,6 +1,7 @@
 
 import base64
 import json
+import sys
 from hashlib import sha1
 
 import boto
@@ -50,11 +51,12 @@ class JSONMessage(boto.sqs.jsonmessage.JSONMessage):
     def decode(self, value):
         try:
             try:
-                value = base64.b64decode(value)
+                value = json.loads(base64.b64decode(value))
             except: pass
             value = json.loads(value)
-        except:
-            raise SQSDecodeError('Unable to decode message', self)
+        except Exception, e:
+            #raise SQSDecodeError('Unable to decode message', self, e), None, sys.exc_traceback
+            raise SQSDecodeError, ('Unable to decode message', self, e), sys.exc_traceback
         return value
 
 

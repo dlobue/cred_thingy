@@ -3,7 +3,7 @@ import sys
 from time import sleep
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('cred_thingy')
 
 import xtraceback
 xtraceback.compat.install_sys_excepthook()
@@ -62,28 +62,30 @@ class runner(object):
         instance_id = message.Message['EC2InstanceId']
         logger.debug("Notified of instance launch for instance %s." % instance_id)
         self.create_creds(instance_id)
+        logger.debug("Deleting launch notice of instance %s" % instance_id)
         message.delete()
 
     def create_creds(self, instance_id):
         instance = self._ec2conn.get_all_instances([instance_id])[0].instances[0]
 
-        creds = self.user_manager.create_instance_user(instance_id)
         host_pubkey = get_host_key(instance.public_dns_name)
+        creds = self.user_manager.create_instance_user(instance_id)
         encrypted_creds = encrypt_data(host_pubkey, creds)
 
-        self.bucket.upload_creds(encrypted_creds)
+        self.bucket.upload_creds(instance_id, encrypted_creds)
         self.bucket.allow_ip(instance.ip_address)
 
     def on_instance_terminate(self, message):
         instance_id = message.Message['EC2InstanceId']
         logger.debug("Notified instance %s was terminated." % instance_id)
         self.user_manager.delete_instance_user(instance_id)
+        logger.debug("Deleting termination notice of instance %s" % instance_id)
         message.delete()
 
 
 if __name__ == '__main__':
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     loggerHandler = logging.StreamHandler(sys.stdout)
     loggerHandler.setLevel(logging.DEBUG)
     loggerFormatter = logging.Formatter('[%(name)s] [%(funcName)s] %(levelname)s: %(message)s')
@@ -91,5 +93,5 @@ if __name__ == '__main__':
     logger.addHandler(loggerHandler)
 
     r = runner(sys.argv[1], sys.argv[2])
-    runner.poll_sqs()
+    r.poll_sqs()
 
