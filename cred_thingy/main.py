@@ -82,6 +82,14 @@ class runner(object):
 
 
 if __name__ == '__main__':
+
+    logger.setLevel(logging.INFO)
+    loggerHandler = logging.StreamHandler(sys.stdout)
+    loggerHandler.setLevel(logging.DEBUG)
+    loggerFormatter = logging.Formatter('[%(name)s] [%(funcName)s] %(levelname)s: %(message)s')
+    loggerHandler.setFormatter(loggerFormatter)
+    logger.addHandler(loggerHandler)
+
     r = runner(sys.argv[1], sys.argv[2])
     runner.poll_sqs()
 
