@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 import boto
 from cloudinit.UserDataHandler import process_includes
 
+ec2conn = boto.connect_ec2()
+
 def preprocess_userdata(data):
     logger.debug("Preprocessing userdata")
     parts = {}
@@ -55,6 +57,5 @@ def get_asg_userdata(asgname):
 
 def get_instance_userdata(instance_id):
     logger.debug("Acquiring userdata for instance %s from aws." % instance_id)
-    ec2conn = boto.connect_ec2()
     return ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
 
