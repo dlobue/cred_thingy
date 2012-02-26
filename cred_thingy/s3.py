@@ -52,14 +52,13 @@ class cred_bucket(object):
     def _get_bucket(self):
         try:
             self._bucket = self._conn.get_bucket(self.name)
+            #TODO: ensure the lifecycle is set and correct
         except boto.exception.S3ResponseError, e:
             if e.status == 404 and e.error_code == u'NoSuchBucket':
                 self._bucket = self._conn.create_bucket(self.name)
+                self.set_lifecycle()
             else:
                 raise e
-            #TODO: if we have to create the bucket, then we have to set the default policy
-            #TODO: also need to set the lifecycle
-            #XXX: or should these be in an 'ensure' stage?
 
 
     def set_lifecycle(self):
