@@ -64,7 +64,7 @@ def link_sqs_sns():
     sns = boto.connect_sns()
     sqs = boto.connect_sqs()
 
-    queue = sqs.create_queue('asg_notifications', 60)
+    queue = sqs.create_queue('asg_notifications', 300)
     topic = sns.create_topic('asg_notifications')
 
     sns.subscribe_sqs_queue(topic['CreateTopicResponse']['CreateTopicResult']['TopicArn'], queue)
