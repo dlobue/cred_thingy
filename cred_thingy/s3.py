@@ -3,7 +3,7 @@ import socket
 from time import sleep
 from pprint import pformat
 import sys
-from threading import Lock
+from threading import _RLock
 from time import time
 import json
 import logging
@@ -28,25 +28,7 @@ class cred_bucket(Singleton):
         self.path_prefix = path_prefix.strip('/*')
         self._get_bucket()
         self._metadata = policy_metadata()
-
-
-    def _acquire(self, timeout=None):
-        #TODO: proper handling of timeout
-        logger.debug("Acquiring lockr")
-        self._metadata._acquire()
-
-    def _release(self):
-        logger.debug("Releasing lockr")
-        self.__policy = self.__statement = None
-        self._metadata._release()
-
-    def __enter__(self):
-        self._acquire()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._release()
-        #XXX: what else?
+        self._lock = LockR(self._metadata._domain)
 
 
     def _get_bucket(self):
@@ -204,11 +186,8 @@ class cred_bucket(Singleton):
 
 
 class policy_metadata(object):
-    _lock = Lock()
-    def __init__(self, domain_name='cred_thingy', lock_key='lockr'):
-        self._fqdn = socket.getfqdn()
+    def __init__(self, domain_name='cred_thingy'):
         self.domain_name = domain_name
-        self.lock_key = lock_key
         self._conn = boto.connect_sdb()
         try:
             self._domain = self._conn.get_domain(domain_name)
@@ -253,42 +232,49 @@ class policy_metadata(object):
                 result.delete()
 
 
-    def _acquire(self):
-        #XXX: should we acquire the shared lock first, or the process lock?
-        self._lock.acquire()
-        self.acquire_shared_lock()
+class LockR(_RLock):
+    def __init__(self, sdb_domain, lock_key='lockr', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._domain = sdb_domain
+        self.lock_key = lock_key
+        self._fqdn = socket.getfqdn() #XXX: should we use fqdn, or perhaps just a uuid?
 
-    def _release(self):
-        self.release_shared_lock()
-        self._lock.release()
+    def acquire(self, *args, **kwargs):
+        r = super().acquire(*args, **kwargs)
+        if r and self._RLock__count == 1:
+            self._acquire_shared_lock()
+        return r
 
-    def acquire_shared_lock(self):
+    def release(self):
+        if self._is_owned() and self._RLock__count == 1:
+            self._release_shared_lock()
+        return super().release()
+
+    def _acquire_shared_lock(self, timeout=None):
+        #TODO: implement a timeout
         result = False
         c=1
         while 1:
             logger.debug("Attempt %s to acquire shared lock" % c)
             try:
-                result = self._conn.put_attributes(self.domain_name,
-                                                self.lock_key,
-                                                dict(owner=self._fqdn),
-                                                expected_value=['owner', False]
-                                               )
+                result = self._domain.put_attributes(self.lock_key,
+                                                     dict(owner=self._fqdn),
+                                                     expected_value=['owner',
+                                                                     False])
                 if result is True:
-                    break
+                    logger.debug("Shared lock acquired")
+                    return result
             except boto.exception.SDBResponseError:
                 pass
             sleep(1)
             #TODO: implement backing-off timer
-            #TODO: implement queue to prevent starvation?
-
-        logger.debug("Shared lock acquired")
+            #XXX: implement queue to prevent starvation?
 
 
-    def release_shared_lock(self):
+
+    def _release_shared_lock(self):
         logger.debug("Releasing shared lock")
-        self._conn.delete_attributes(self.domain_name,
-                                   self.lock_key,
-                                   ['owner'],
-                                   expected_value=['owner', self._fqdn])
+        self._domain.delete_attributes(self.lock_key, ['owner'],
+                                       expected_value=['owner', self._fqdn])
 
 
