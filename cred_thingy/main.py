@@ -72,6 +72,10 @@ class runner(object):
     def create_creds(self, instance_id):
         instance = self._ec2conn.get_all_instances([instance_id])[0].instances[0]
 
+        if not instance.public_dns_name:
+            logger.warn("Instance %s is no longer online" % instance_id)
+            return
+
         host_pubkey = get_host_key(instance.public_dns_name)
         creds = self.user_manager.create_instance_user(instance_id)
         encrypted_creds = encrypt_data(host_pubkey, creds)
