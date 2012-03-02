@@ -5,6 +5,7 @@ from pprint import pformat
 import sys
 from threading import _RLock
 from time import time
+from functools import wraps
 import json
 import logging
 logger = logging.getLogger(__name__)
@@ -17,6 +18,16 @@ from cred_thingy.util import memoize_attr, Singleton
 
 CLEAN_INTERVAL = 30 * 60
 
+def lock(already_have_shared=False):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            if already_have_shared and not self._lock._RLock__count:
+                raise RuntimeError, "Data possibly invalid! shared lock already released!"
+            with self._lock:
+                return f(self, *args, **kwargs)
+        return wrapper
+    return decorator
 
 class cred_bucket(Singleton):
     policy_statement_id = "instance_creds"
@@ -70,8 +81,8 @@ class cred_bucket(Singleton):
                 Statement=[],
             )
 
+    @lock(already_have_shared=True)
     def _get_policy(self):
-        #TODO: need to ensure we have lock before running this
         logger.debug("Getting s3 bucket policy for bucket %s" % self.name)
         try:
             p = self._bucket.get_policy()
@@ -85,8 +96,6 @@ class cred_bucket(Singleton):
         finds the credential access policy statement, or creates it if
         it doesn't exist yet.
         """
-
-        #TODO: need to ensure we have lock before running this
         logger.debug("finding the cred_thingy policy statement %s and separating it from the policy for modifications." % self.policy_statement_id)
 
         statements = policy['Statement']
@@ -114,8 +123,8 @@ class cred_bucket(Singleton):
         policy['Statement'].append(s)
         return s
 
+    @lock
     def _allow_ip(self, source_ip, policy):
-        #TODO: need to ensure we have lock before running this
         statement = self._find_statement(policy)
         source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
         if not isinstance(source_ips, list):
@@ -140,12 +149,15 @@ class cred_bucket(Singleton):
 
         return policy
 
+    @lock
     def allow_ip(self, source_ip):
+        #TODO: figure out a way to batch these options when this node has the lock
         logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
         policy = self._get_policy()
         self._allow_ip(source_ip, policy)
         self._update_policy(policy)
 
+    @lock(already_have_shared=True)
     def _update_policy(self, policy):
         logger.debug("uploading the new bucket policy to s3.")
         return self._bucket.set_policy(json.dumps(policy))
@@ -156,12 +168,14 @@ class cred_bucket(Singleton):
         # and give them a 1 day TTL.
         pass
 
+    @lock
     def clean(self):
-        #TODO: need to ensure we have lock before running this
+        #TODO: figure out a way to batch these options when this node has the lock
         policy = self._get_policy()
         self._clean(policy, delete=True)
         self._update_policy(policy)
 
+    @lock
     def _clean(self, policy, delete=False):
         statement = self._find_statement(policy)
         source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
