@@ -189,7 +189,7 @@ class cred_bucket(object):
 
         for source_ip in self._metadata.iter_stale_ips(delete=delete):
             if source_ip in source_ips:
-                logger.info("removing stale source_ip address from bucket policy", source_ip)
+                logger.info("removing stale source_ip address %s from bucket policy" % source_ip)
                 del source_ips[source_ips.index(source_ip)]
 
         return policy
