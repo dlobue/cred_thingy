@@ -83,12 +83,19 @@ class runner(object):
         self.bucket.upload_creds(instance_id, encrypted_creds)
         self.bucket.allow_ip(instance.ip_address)
 
+    def delete_creds(self, instance_id):
+        self.user_manager.delete_instance_user(instance_id)
+
     def on_instance_terminate(self, message):
         instance_id = message.Message['EC2InstanceId']
         logger.debug("Notified instance %s was terminated." % instance_id)
-        self.user_manager.delete_instance_user(instance_id)
+        self.delete_creds(instance_id)
         logger.debug("Deleting termination notice of instance %s" % instance_id)
         message.delete()
+
+    def clean_acl(self):
+        logger.info("Cleaning bucket ACLs")
+        self.bucket.clean()
 
 
 if __name__ == '__main__':
@@ -101,5 +108,10 @@ if __name__ == '__main__':
     logger.addHandler(loggerHandler)
 
     r = runner(sys.argv[1], sys.argv[2])
-    r.poll_sqs()
+    try:
+        cmd = sys.argv[3]
+    except IndexError:
+        r.poll_sqs()
+    else:
+        getattr(r, cmd)(*sys.argv[4:])
 
