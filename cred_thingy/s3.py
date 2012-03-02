@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 from boto.s3.lifecycle import Lifecycle
 import boto
 
-from cred_thingy.util import memoize_attr
+from cred_thingy.util import memoize_attr, Singleton
 
 CLEAN_INTERVAL = 30 * 60
 
 
-class cred_bucket(object):
+class cred_bucket(Singleton):
     policy_statement_id = "instance_creds"
     policy_version = "2008-10-17"
 
