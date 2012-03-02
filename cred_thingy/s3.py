@@ -163,10 +163,24 @@ class cred_bucket(Singleton):
         return self._bucket.set_policy(json.dumps(policy))
 
 
+    def _rectify(self, policy):
+        statement = self._find_statement(policy)
+        source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
+        if not isinstance(source_ips, list):
+            source_ips = [source_ips]
+            statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
+
+        for source_ip in source_ips:
+            self._metadata.create_ttl_record(source_ip)
+
+
+    @lock
     def rectify(self):
-        #TODO: once a week go through the list of source ip addresses in the policy
-        # and give them a 1 day TTL.
-        pass
+        #TODO: figure out a way to batch these options when this node has the lock
+        #TODO: run this once a week
+        policy = self._get_policy()
+        self._rectify(policy)
+        self._update_policy(policy)
 
     @lock
     def clean(self):
