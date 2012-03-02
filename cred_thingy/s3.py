@@ -193,7 +193,7 @@ class policy_metadata(object):
             self._domain = self._conn.get_domain(domain_name)
         except boto.exception.SDBResponseError, e:
             if e.status == 400 and e.error_code == u'NoSuchDomain':
-                self._conn.create_domain(domain_name)
+                self._domain = self._conn.create_domain(domain_name)
             else:
                 raise e
 
@@ -201,11 +201,8 @@ class policy_metadata(object):
         now = time()
         ttl = now - (now % CLEAN_INTERVAL) + CLEAN_INTERVAL + (60 * 60 * 24)
         logger.debug("Creating ttl record for ip address %s to go off at epoch %s" % (source_ip, ttl))
-        self._domain.put_attributes(ttl,
-                                    dict(source_ips=source_ip,
-                                         ttl=ttl),
+        self._domain.put_attributes(ttl, dict(source_ips=source_ip, ttl=ttl),
                                     replace=False)
-
 
     def iter_stale_ips(self, delete=False):
         logger.info("Iterating over records that are past their ttl.")
