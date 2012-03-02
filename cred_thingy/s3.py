@@ -12,12 +12,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-from boto.s3.lifecycle import Lifecycle
-import boto
+from boto.s3.lifecycle import Rule, Lifecycle as _Lifecycle
+import boto, boto.s3.lifecycle
 
 from cred_thingy.util import memoize_attr, Singleton
 
 CLEAN_INTERVAL = 30 * 60
+
+class Lifecycle(_Lifecycle):
+    def __init__(self, bucket=None):
+        self.bucket = bucket
+
+    def to_xml(self):
+        """
+        Returns a string containing the XML version of the Lifecycle
+        configuration as defined by S3.
+        """
+        s = '<LifecycleConfiguration>'
+        s += ''.join((rule.to_xml() for rule in self if type(rule) is Rule))
+        #for rule in self:
+            #s += rule.to_xml()
+        s += '</LifecycleConfiguration>'
+        return s
+
+boto.s3.lifecycle.Lifecycle = Lifecycle
+
 
 def lock(already_have_shared=False):
     def decorator(f):
@@ -55,21 +74,40 @@ class cred_bucket(Singleton):
     def _get_bucket(self):
         try:
             self._bucket = self._conn.get_bucket(self.name)
-            #TODO: ensure the lifecycle is set and correct
         except boto.exception.S3ResponseError, e:
             if e.status == 404 and e.error_code == u'NoSuchBucket':
                 self._bucket = self._conn.create_bucket(self.name)
-                self.set_lifecycle()
+            else:
+                raise e
+        self.set_lifecycle()
+
+    def set_lifecycle(self):
+        try:
+            lifecycle = self._bucket.get_lifecycle_config()
+        except boto.exception.S3ResponseError, e:
+            if e.status == 404 and e.error_code == u'NoSuchLifecycleConfiguration':
+                logger.debug("No lifecycle configuration found. Creating a new one.")
+                lifecycle = Lifecycle()
             else:
                 raise e
 
-    def set_lifecycle(self):
-        #TODO: figure out where/when to do this
+        rule_id = 'instance_creds'
+        rule_prefix = self.path_prefix
+
+        if lifecycle:
+            rules = (r for r in lifecycle if type(r) is Rule)
+            for rule in rules:
+                if rule.id == rule_id or rule.prefix.startswith(rule_prefix):
+                    logger.debug("Found existing lifecycle rule matching path or name.")
+                    if rule.expiration != 1 or rule.status != 'Enabled':
+                        logger.debug("Discovered rule was incorrectly configured. deleting it.")
+                        lifecycle.pop(lifecycle.index(rule))
+                    else:
+                        return
+
         logger.debug("Creating s3 object expiration rule for instance creds.")
-        new_lifecycle = Lifecycle()
-        #TODO: use path prefix in the lifecycle rule prefix
-        new_lifecycle.add_rule('instance_creds', 'instance_creds/', 'Enabled', 1)
-        result = self._bucket.configure_lifecycle(new_lifecycle)
+        lifecycle.add_rule(rule_id, rule_prefix.strip('/*') + '/', 'Enabled', 1)
+        result = self._bucket.configure_lifecycle(lifecycle)
         assert result, "failed to set lifecycle!"
 
     @property
