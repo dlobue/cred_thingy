@@ -8,7 +8,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 import boto
-from cloudinit.UserDataHandler import process_includes
+try:
+    from cloudinit.UserDataHandler import process_includes
+except ImportError:
+    from cred_thingy.cloudconfig import process_includes
 
 ec2conn = boto.connect_ec2()
 
