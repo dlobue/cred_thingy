@@ -43,15 +43,19 @@ class runner(object):
 
 
         while 1:
-            message = queue.read(30)
+            message = queue.read(300)
             if message is None:
                 sleep(30)
                 continue
 
-            {'autoscaling:EC2_INSTANCE_LAUNCH': self.on_instance_launch,
-             'autoscaling:EC2_INSTANCE_TERMINATE': self.on_instance_terminate,
-             'autoscaling:EC2_INSTANCE_TERMINATE_ERROR': self.on_instance_terminate,
-            }[message.Message['Event']](message)
+            try:
+                {'autoscaling:EC2_INSTANCE_LAUNCH': self.on_instance_launch,
+                 'autoscaling:EC2_INSTANCE_TERMINATE': self.on_instance_terminate,
+                 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR': self.on_instance_terminate,
+                }[message.Message['Event']](message)
+            except (KeyError, AttributeError):
+                logger.error("Got an unknown message type: %s" % message._body)
+                message.delete()
 
 
     def rectify(self):
