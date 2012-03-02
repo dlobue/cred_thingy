@@ -162,9 +162,9 @@ class cred_bucket(object):
         logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
         policy = self._get_policy()
         self._allow_ip(source_ip, policy)
-        self.update_policy(policy)
+        self._update_policy(policy)
 
-    def update_policy(self, policy):
+    def _update_policy(self, policy):
         logger.debug("uploading the new bucket policy to s3.")
         return self._bucket.set_policy(json.dumps(policy))
 
@@ -178,7 +178,7 @@ class cred_bucket(object):
         #TODO: need to ensure we have lock before running this
         policy = self._get_policy()
         self._clean(policy, delete=True)
-        self.update_policy(policy)
+        self._update_policy(policy)
 
     def _clean(self, policy, delete=False):
         statement = self._find_statement(policy)
