@@ -1,12 +1,14 @@
 
-from paramiko.transport import Transport, SSHException
-from socket import create_connection
+from socket import create_connection, error
+from uuid import uuid4
+from time import sleep
 import logging
 
-from uuid import uuid4
+logger = logging.getLogger(__name__)
+
+from paramiko.transport import Transport, SSHException
 from Crypto.PublicKey import RSA
 
-logger = logging.getLogger(__name__)
 
 def get_host_key(host, port=22):
     #TODO: need to add in a retry mechanism
