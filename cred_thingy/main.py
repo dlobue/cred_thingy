@@ -1,6 +1,7 @@
 
 import sys
 from time import sleep
+import signal
 import logging
 
 logger = logging.getLogger('cred_thingy')
@@ -17,12 +18,29 @@ from cred_thingy.s3 import cred_bucket
 
 class runner(object):
     def __init__(self, queue_name, bucket_name, path_prefix='instance_creds'):
+        self.stop_now = False
         self.bucket = cred_bucket(bucket_name, path_prefix)
         self.queue_name = queue_name
         self._sqsconn = boto.connect_sqs()
         self._ec2conn = boto.connect_ec2()
         self.user_manager = user_manager()
         self._get_queue()
+
+
+    def on_sighup(self, signalnum, frame):
+        logger.info("got sighup")
+        pass
+
+    def on_sigterm(self, signalnum, frame):
+        logger.info("got sigterm")
+        self.stop_now = True
+
+
+    def add_signal_handlers(self):
+        signal.signal(signal.SIGHUP, self.on_sighup)
+        signal.signal(signal.SIGINT, self.on_sigterm)
+        signal.signal(signal.SIGTERM, self.on_sigterm)
+
 
     def _get_queue(self):
         queue = self._sqsconn.get_queue(self.queue_name)
@@ -35,7 +53,14 @@ class runner(object):
         queue.set_message_class(JSONMessage)
         self.queue = queue
 
-
+    def run(self):
+        self.add_signal_handlers()
+        try:
+            self.poll_sqs()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.bucket._lock._release_shared_lock()
 
     def poll_sqs(self):
         queue = self.queue
@@ -44,8 +69,12 @@ class runner(object):
 
         while 1:
             message = queue.read(300)
+            if self.stop_now:
+                if message is not None:
+                    message.change_visibility(0)
+                break
             if message is None:
-                sleep(30)
+                sleep(5)
                 continue
 
             try:
@@ -97,6 +126,9 @@ class runner(object):
         logger.info("Cleaning bucket ACLs")
         self.bucket.clean(delete=True)
 
+    def test_lock(self):
+        self.bucket.test_lock()
+
 
 if __name__ == '__main__':
 
@@ -111,7 +143,7 @@ if __name__ == '__main__':
     try:
         cmd = sys.argv[3]
     except IndexError:
-        r.poll_sqs()
+        r.run()
     else:
         getattr(r, cmd)(*sys.argv[4:])
 

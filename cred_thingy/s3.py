@@ -230,6 +230,14 @@ class cred_bucket(Singleton):
         s3key = self._bucket.new_key(key_name)
         return s3key.set_contents_from_string(encrypted_creds, reduced_redundancy=True)
 
+    @update_policy
+    def test_lock(self, policy):
+        logger.info('testing the lock')
+        try:
+            sleep(600)
+        except KeyboardInterrupt:
+            pass
+
 
 class policy_metadata(object):
     def __init__(self, domain_name='cred_thingy'):
@@ -317,6 +325,7 @@ class LockR(_RLock):
             except boto.exception.SDBResponseError:
                 #TODO: create a list of acceptable errors to retry on, and only retry on those
                 pass
+            c+=1
             sleep(1)
             #TODO: implement backing-off timer
             #XXX: implement queue to prevent starvation?
