@@ -29,6 +29,15 @@ def lock(already_have_shared=False):
         return wrapper
     return decorator
 
+def update_policy(f):
+    @lock()
+    @wraps(f)
+    def wrapper(self, *args, **kwargs):
+        policy = self._get_policy()
+        f(self, policy=policy, *args, **kwargs)
+        return self._update_policy(policy)
+    return wrapper
+
 class cred_bucket(Singleton):
     policy_statement_id = "instance_creds"
     policy_version = "2008-10-17"
@@ -41,7 +50,6 @@ class cred_bucket(Singleton):
         self._metadata = policy_metadata()
         self._lock = LockR(self._metadata._domain)
 
-
     def _get_bucket(self):
         try:
             self._bucket = self._conn.get_bucket(self.name)
@@ -52,7 +60,6 @@ class cred_bucket(Singleton):
                 self.set_lifecycle()
             else:
                 raise e
-
 
     def set_lifecycle(self):
         #TODO: figure out where/when to do this
@@ -74,7 +81,6 @@ class cred_bucket(Singleton):
 
         return "arn:aws:s3:::" + self.name + path_prefix
 
-
     def _new_policy(self):
         return dict(
                 Version=self.policy_version,
@@ -90,6 +96,11 @@ class cred_bucket(Singleton):
         except boto.exception.S3ResponseError:
             logger.debug("No bucket policy for bucket %s found! creating a new policy from scratch!")
             return self._new_policy()
+
+    @lock(already_have_shared=True)
+    def _update_policy(self, policy):
+        logger.debug("uploading the new bucket policy to s3.")
+        return self._bucket.set_policy(json.dumps(policy))
 
     def _find_statement(self, policy):
         """
@@ -123,14 +134,20 @@ class cred_bucket(Singleton):
         policy['Statement'].append(s)
         return s
 
-    @lock
-    def _allow_ip(self, source_ip, policy):
+    def _get_source_ips(self, policy):
         statement = self._find_statement(policy)
         source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
         if not isinstance(source_ips, list):
             source_ips = [source_ips]
             statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
 
+        return source_ips, statement
+
+    @update_policy
+    def allow_ip(self, policy, source_ip):
+        #TODO: figure out a way to batch these options when this node has the lock
+        logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
+        source_ips, statement = self._get_source_ips(policy)
 
         if '/' in source_ip:
             try:
@@ -149,62 +166,23 @@ class cred_bucket(Singleton):
 
         return policy
 
-    @lock
-    def allow_ip(self, source_ip):
+    @update_policy
+    def rectify(self, policy):
         #TODO: figure out a way to batch these options when this node has the lock
-        logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
-        policy = self._get_policy()
-        self._allow_ip(source_ip, policy)
-        self._update_policy(policy)
-
-    @lock(already_have_shared=True)
-    def _update_policy(self, policy):
-        logger.debug("uploading the new bucket policy to s3.")
-        return self._bucket.set_policy(json.dumps(policy))
-
-
-    def _rectify(self, policy):
-        statement = self._find_statement(policy)
-        source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
-        if not isinstance(source_ips, list):
-            source_ips = [source_ips]
-            statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
-
+        #TODO: run this once a week
+        source_ips, statement = self._get_source_ips(policy)
         for source_ip in source_ips:
             self._metadata.create_ttl_record(source_ip)
 
-
-    @lock
-    def rectify(self):
-        #TODO: figure out a way to batch these options when this node has the lock
-        #TODO: run this once a week
-        policy = self._get_policy()
-        self._rectify(policy)
-        self._update_policy(policy)
-
-    @lock
-    def clean(self):
-        #TODO: figure out a way to batch these options when this node has the lock
-        policy = self._get_policy()
-        self._clean(policy, delete=True)
-        self._update_policy(policy)
-
-    @lock
-    def _clean(self, policy, delete=False):
-        statement = self._find_statement(policy)
-        source_ips = statement['Condition']['IpAddress'].get('aws:SourceIp', [])
-        if not isinstance(source_ips, list):
-            source_ips = [source_ips]
-            statement['Condition']['IpAddress']['aws:SourceIp'] = source_ips
-
+    @update_policy
+    def clean(self, policy, delete=False):
+        source_ips, statement = self._get_source_ips(policy)
         for source_ip in self._metadata.iter_stale_ips(delete=delete):
             if source_ip in source_ips:
                 logger.info("removing stale source_ip address %s from bucket policy" % source_ip)
                 del source_ips[source_ips.index(source_ip)]
 
         return policy
-
-
 
     def upload_creds(self, instance_id, encrypted_creds):
         key_name = self.path_prefix.strip('/*') + '/' + instance_id
