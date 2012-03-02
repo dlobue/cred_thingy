@@ -1,6 +1,13 @@
 
+
+from gevent import monkey, sleep
+monkey.patch_all(httplib=True, thread=True)
+from gevent.core import timer
+
+
+from gevent.pool import Pool
+
 import sys
-from time import sleep
 import signal
 import logging
 
@@ -14,7 +21,13 @@ import boto
 from cred_thingy.notifications import JSONMessage
 from cred_thingy.iam import user_manager
 from cred_thingy.crypt import encrypt_data, get_host_key
-from cred_thingy.s3 import cred_bucket
+from cred_thingy.s3 import cred_bucket, CLEAN_INTERVAL
+
+def schedule(time, f, *args, **kwargs):
+    try:
+        f(*args, **kwargs)
+    finally:
+        timer(time, schedule, time, f, *args, **kwargs)
 
 class runner(object):
     def __init__(self, queue_name, bucket_name, path_prefix='instance_creds'):
@@ -23,6 +36,7 @@ class runner(object):
         self.queue_name = queue_name
         self._sqsconn = boto.connect_sqs()
         self._ec2conn = boto.connect_ec2()
+        self.pool = Pool(1000)
         self.user_manager = user_manager()
         self._get_queue()
 
@@ -34,6 +48,7 @@ class runner(object):
     def on_sigterm(self, signalnum, frame):
         logger.info("got sigterm")
         self.stop_now = True
+        self.pool.join()
 
 
     def add_signal_handlers(self):
@@ -55,6 +70,7 @@ class runner(object):
 
     def run(self):
         self.add_signal_handlers()
+        self.pool.spawn(schedule, CLEAN_INTERVAL, self.pool.spawn, self.clean_acl)
         try:
             self.poll_sqs()
         except KeyboardInterrupt:
@@ -65,7 +81,7 @@ class runner(object):
     def poll_sqs(self):
         queue = self.queue
         logger.debug("Starting to poll sqs")
-
+        pool = self.pool
 
         while 1:
             message = queue.read(300)
@@ -78,13 +94,17 @@ class runner(object):
                 continue
 
             try:
-                {'autoscaling:EC2_INSTANCE_LAUNCH': self.on_instance_launch,
-                 'autoscaling:EC2_INSTANCE_TERMINATE': self.on_instance_terminate,
-                 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR': self.on_instance_terminate,
-                }[message.Message['Event']](message)
+                func = {'autoscaling:EC2_INSTANCE_LAUNCH':
+                        self.on_instance_launch,
+                        'autoscaling:EC2_INSTANCE_TERMINATE':
+                        self.on_instance_terminate,
+                        'autoscaling:EC2_INSTANCE_TERMINATE_ERROR':
+                        self.on_instance_terminate, }[message.Message['Event']]
             except (KeyError, AttributeError):
                 logger.error("Got an unknown message type: %s" % message._body)
                 message.delete()
+
+            pool.spawn(func, message)
 
 
     def rectify(self):
