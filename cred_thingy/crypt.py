@@ -12,13 +12,25 @@ from Crypto.PublicKey import RSA
 
 def get_host_key(host, port=22):
     #TODO: need to add in a retry mechanism
-    sock = create_connection((host, port))
     logger.debug("Connecting to host %s to get ssh public host key" % host)
+    MAX_RETRY = 60 / 15 * 5
+    c = 0
+    while 1:
+        try:
+            sock = create_connection((host, port))
 
-    transport = Transport(sock)
-    transport.start_client()
-    key = transport.get_remote_server_key()
-    transport.close()
+            transport = Transport(sock)
+            transport.start_client()
+            key = transport.get_remote_server_key()
+            transport.close()
+            break
+        except (error, SSHException):
+            c += 1
+            assert MAX_RETRY > c, "aborting attempt to connect to connect to server"
+            logger.exception("attempt %s - error while attempting to connect to %s" % (c, host))
+            #TODO: check if instance has been shutdown since we were told about it
+            sleep(15)
+
 
     return key
 
