@@ -1,15 +1,15 @@
-- Add in scheduler
-- make async
-- get locks working
+- Add in scheduler *DONE*
+- make async *DONE*
+- get locks working *DONE*
 - create helpers to configure autoscaling groups, sns, and sqs together so autoscaling notifications end up in an sqs queue.
 - create helpers to load base iam groups.
 - write handler to scan aws ec2 metadata to find instances that haven't been given credentials yet.
-- schedule policy cleanups.
+- schedule policy cleanups. *DONE*
 - documentation
 - add more error handling
-- add retry mechanism when getting ssh public hostkey
+- add retry mechanism when getting ssh public hostkey *DONE*
 - verify asg notifications are legit using their signatures.
-- need to install s3 object expiration config
+- need to install s3 object expiration config *DONE*
 - implement backing-off timer
 - implement some timeouts
 - unit tests!

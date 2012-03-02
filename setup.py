@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import sys, os
 
-version = '0.0.1'
+version = '0.0.2'
 
 setup(name='cred_thingy',
       version=version,
@@ -17,6 +17,7 @@ setup(name='cred_thingy',
       include_package_data=True,
       zip_safe=False,
       install_requires=[
+          "gevent>=0.13.6",
           "paramiko",
           "boto>=2.0rc1",
           "xtraceback",
