@@ -95,7 +95,7 @@ class runner(object):
 
     def clean_acl(self):
         logger.info("Cleaning bucket ACLs")
-        self.bucket.clean()
+        self.bucket.clean(delete=True)
 
 
 if __name__ == '__main__':

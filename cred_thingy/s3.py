@@ -6,6 +6,7 @@ import sys
 from threading import _RLock
 from time import time
 from functools import wraps
+from uuid import uuid4
 import json
 import logging
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def update_policy(f):
     @lock()
     @wraps(f)
     def wrapper(self, *args, **kwargs):
+        logger.debug("Going to be updating the bucket policy. working with %r" % f)
         policy = self._get_policy()
         f(self, policy=policy, *args, **kwargs)
         return self._update_policy(policy)
@@ -237,13 +239,14 @@ class policy_metadata(object):
 
 class LockR(_RLock):
     def __init__(self, sdb_domain, lock_key='lockr', *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super(LockR, self).__init__(*args, **kwargs)
         self._domain = sdb_domain
         self.lock_key = lock_key
-        self._fqdn = socket.getfqdn() #XXX: should we use fqdn, or perhaps just a uuid?
+        self._fqdn = '%s%s' % (socket.getfqdn(), uuid4().hex)
+        #self._fqdn = socket.getfqdn() #XXX: should we use fqdn, or perhaps just a uuid?
 
     def acquire(self, *args, **kwargs):
-        r = super().acquire(*args, **kwargs)
+        r = super(LockR, self).acquire(*args, **kwargs)
         if r and self._RLock__count == 1:
             self._acquire_shared_lock()
         return r
@@ -251,7 +254,13 @@ class LockR(_RLock):
     def release(self):
         if self._is_owned() and self._RLock__count == 1:
             self._release_shared_lock()
-        return super().release()
+        return super(LockR, self).release()
+
+    def __enter__(self):
+        return self.acquire()
+
+    def __exit__(self, *args, **kwargs):
+        self.release()
 
     def _acquire_shared_lock(self, timeout=None):
         #TODO: implement a timeout
@@ -268,16 +277,26 @@ class LockR(_RLock):
                     logger.debug("Shared lock acquired")
                     return result
             except boto.exception.SDBResponseError:
+                #TODO: create a list of acceptable errors to retry on, and only retry on those
                 pass
             sleep(1)
             #TODO: implement backing-off timer
             #XXX: implement queue to prevent starvation?
 
-
-
     def _release_shared_lock(self):
         logger.debug("Releasing shared lock")
-        self._domain.delete_attributes(self.lock_key, ['owner'],
-                                       expected_value=['owner', self._fqdn])
+        while 1:
+            try:
+                self._domain.delete_attributes(self.lock_key, ['owner'],
+                                               expected_values=['owner',
+                                                                self._fqdn])
+                break
+            except boto.exception.SDBResponseError, e:
+                if e.status == 404:
+                    break
+                elif e.status in (500,503):
+                    continue
+                else:
+                    raise e
 
 
