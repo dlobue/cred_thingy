@@ -108,7 +108,8 @@ class runner(object):
                         'autoscaling:EC2_INSTANCE_TERMINATE_ERROR':
                         self.on_instance_terminate, }[message.Message['Event']]
             except (KeyError, AttributeError):
-                logger.error("Got an unknown message type: %s" % message._body)
+                if message.Message['Event'] != 'autoscaling:TEST_NOTIFICATION':
+                    logger.error("Got an unknown message type: %s" % message._body)
                 message.delete()
                 continue
 
