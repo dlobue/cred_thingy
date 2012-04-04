@@ -19,9 +19,9 @@ xtraceback.compat.install_sys_excepthook()
 import boto
 
 from cred_thingy.notifications import JSONMessage
-from cred_thingy.iam import user_manager
+from cred_thingy.iam import user_manager, CLEAR_DEAD_ACCOUNTS_INTERVAL
 from cred_thingy.crypt import encrypt_data, get_host_key
-from cred_thingy.s3 import cred_bucket, CLEAN_INTERVAL
+from cred_thingy.s3 import cred_bucket, CLEAN_INTERVAL, lock
 
 def schedule(time, f, *args, **kwargs):
     try:
@@ -40,6 +40,10 @@ class runner(object):
         self.user_manager = user_manager()
         self._get_queue()
 
+
+    @property
+    def _lock(self):
+        return self.bucket._lock #hacky..
 
     def on_sighup(self, signalnum, frame):
         logger.info("got sighup")
@@ -70,7 +74,10 @@ class runner(object):
 
     def run(self):
         self.add_signal_handlers()
+        #clean out stale source ips every 30 minutes
         self.pool.spawn(schedule, CLEAN_INTERVAL, self.pool.spawn, self.clean_acl)
+        #clear out iam accounts belonging to dead ec2 instances every 60 minutes
+        self.pool.spawn(schedule, CLEAR_DEAD_ACCOUNTS_INTERVAL, self.pool.spawn, self.clear_dead_instance_accounts)
         try:
             self.poll_sqs()
         except KeyboardInterrupt:
@@ -142,6 +149,11 @@ class runner(object):
     def clean_acl(self):
         logger.info("Cleaning bucket ACLs")
         self.bucket.clean(delete=True)
+
+    @lock()
+    def clear_dead_instance_accounts(self):
+        logger.info("Cleaning out iam accounts belonging to dead instances.")
+        self.user_manager.clear_dead_instance_accounts()
 
     def test_lock(self):
         self.bucket.test_lock()

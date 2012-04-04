@@ -9,6 +9,7 @@ from cred_thingy.userdata import get_chef_attribs
 
 class AlreadyDeleted(Exception): pass
 
+CLEAR_DEAD_ACCOUNTS_INTERVAL = 60 * 60
 
 class user_manager(object):
     default_groups = ['base']
@@ -17,6 +18,7 @@ class user_manager(object):
     def __init__(self, group_prefix='chef'):
         self.group_prefix = group_prefix
         self._iamconn = boto.connect_iam()
+        self._ec2conn = boto.connect_ec2()
 
     def iter_applicable_groups(self, traits):
         logger.debug("iterating over iam groups that match up with chef traits: %s" % ', '.join(traits))
@@ -34,6 +36,29 @@ class user_manager(object):
                 yield group
 
 
+
+    def iter_dead_instance_accounts(self):
+        logger.debug("Locating all iam accounts referencing dead instances.")
+        resp = self._iamconn.get_all_users('/cred_thingy/')
+        ct_users = resp[u'list_users_response'][u'list_users_result'][u'users']
+        ec2conn = self._ec2conn
+        for ct_user in ct_users:
+            instance_id = ct_user[u'user_name']
+            try:
+                instance = ec2conn.get_all_instance_status([instance_id])[0]
+            except boto.exception.EC2ResponseError, e:
+                if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                    yield instance_id
+                else:
+                    raise e
+
+            if instance.state_code not in (0,16):
+                yield instance_id
+
+    def clear_dead_instance_accounts(self):
+        for instance_id in self.iter_dead_instance_accounts():
+            logger.debug("Clearing iam account for dead instance %s" % instance_id)
+            self.delete_instance_user(instance_id)
 
     def _get_instance_access_keys(self, instance_id):
         logger.debug("Locating all existing access keys for instances %s" % instance_id)
