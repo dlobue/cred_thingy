@@ -1,5 +1,5 @@
 
-from socket import create_connection, error
+from socket import create_connection, error, timeout
 from uuid import uuid4
 from time import sleep
 import logging
@@ -11,9 +11,9 @@ from Crypto.PublicKey import RSA
 
 
 def get_host_key(host, port=22):
-    #TODO: need to add in a retry mechanism
     logger.debug("Connecting to host %s to get ssh public host key" % host)
-    MAX_RETRY = 60 / 15 * 5
+    INTERVAL = 15
+    MAX_RETRY = 60 / INTERVAL * 5
     c = 0
     while 1:
         try:
@@ -24,12 +24,19 @@ def get_host_key(host, port=22):
             key = transport.get_remote_server_key()
             transport.close()
             break
-        except (error, SSHException):
-            c += 1
-            assert MAX_RETRY > c, "aborting attempt to connect to connect to server"
+        except error, e:
+            if type(e) is timeout:
+                log = logger.warn
+            else:
+                log = logger.error
+            log('socket %s: errno=%r, error msg=%s for server %s' % (e.__class__.__name__, e.errno, e.strerror, host))
+        except SSHException, e:
             logger.exception("attempt %s - error while attempting to connect to %s" % (c, host))
-            #TODO: check if instance has been shutdown since we were told about it
-            sleep(15)
+
+        c += 1
+        assert MAX_RETRY > c, "aborting attempt to connect to connect to server"
+        #TODO: check if instance has been shutdown since we were told about it
+        sleep(INTERVAL)
 
 
     return key
