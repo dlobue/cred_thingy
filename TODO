@@ -3,8 +3,9 @@
 - get locks working *DONE*
 - create helpers to configure autoscaling groups, sns, and sqs together so autoscaling notifications end up in an sqs queue.
 - create helpers to load base iam groups.
-- write handler to scan aws ec2 metadata to find instances that haven't been given credentials yet.
+- write handler to scan aws ec2 metadata to find instances that haven't been given credentials yet. *DROPPED*
 - schedule policy cleanups. *DONE*
+- remove iam accounts belonging to ec2 instances that are no longer around. *DONE*
 - documentation
 - add more error handling
 - add retry mechanism when getting ssh public hostkey *DONE*
