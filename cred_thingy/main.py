@@ -103,6 +103,7 @@ class runner(object):
             except (KeyError, AttributeError):
                 logger.error("Got an unknown message type: %s" % message._body)
                 message.delete()
+                continue
 
             pool.spawn(func, message)
 
