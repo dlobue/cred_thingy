@@ -184,7 +184,7 @@ class cred_bucket(Singleton):
         return source_ips, statement
 
     @update_policy
-    def allow_ip(self, policy, source_ip):
+    def allow_ip(self, source_ip, policy):
         #TODO: figure out a way to batch these options when this node has the lock
         logger.info("Granting access to the cred_thingy folder to the IP address %s" % source_ip)
         source_ips, statement = self._get_source_ips(policy)
