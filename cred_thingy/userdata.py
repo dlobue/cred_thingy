@@ -52,6 +52,7 @@ def get_chef_attribs(instance_id):
     return _get_chef_attribs(udp)
 
 def get_instance_userdata(instance_id):
+    #TODO: iter over all regions until the region the instance belongs to is located.
     logger.debug("Acquiring userdata for instance %s from aws." % instance_id)
     return ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
 
