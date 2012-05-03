@@ -51,6 +51,15 @@ def get_chef_attribs(instance_id):
     udp = preprocess_userdata(ud)
     return _get_chef_attribs(udp)
 
+
+
+def get_asg_userdata(asgname):
+    #XXX: don't think this one is needed
+    asgconn = boto.connect_autoscale()
+    asg = asgconn.get_all_groups(names=[asgname])[0]
+    lc = asgconn.get_all_launch_configurations(names=[asg.launch_config_name])
+    return lc.user_data
+
 def get_instance_userdata(instance_id):
     #TODO: iter over all regions until the region the instance belongs to is located.
     logger.debug("Acquiring userdata for instance %s from aws." % instance_id)
