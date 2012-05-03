@@ -3,6 +3,8 @@ from email import message_from_string
 from base64 import decodestring
 from json import loads as json_loads
 from zlib import decompress, error
+from cStringIO import StringIO
+from gzip import GzipFile
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,14 +17,38 @@ except ImportError:
 
 ec2conn = boto.connect_ec2()
 
+class NotCompressed(Exception): pass
+
 def preprocess_userdata(data):
     logger.debug("Preprocessing userdata")
     parts = {}
-    data = decodestring(data)
+    def _decompress(data):
+        try:
+            data = decompress(data)
+            logger.debug("Was able to decompress userdata using zlib")
+        except error:
+            try:
+                data = GzipFile(mode='rb', fileobj=StringIO(data)).read()
+                logger.debug("Had to use GzipFile to decompress userdata.")
+            except IOError, e:
+                if e.message == 'Not a gzipped file':
+                    raise NotCompressed
+                else:
+                    raise e
+        return data
+
     try:
-        data = decompress(data)
-    except error:
-        pass
+        data = _decompress(data)
+        logger.debug("Userdata was not encoded in base64 at all.")
+    except NotCompressed:
+        try:
+            data = _decompress( decodestring( data ) )
+            logger.debug("Had to decode base64 encoded userdata before decompression.")
+        except NotCompressed:
+            logger.debug("Userdata is either uncompressed, or useless!")
+            #TODO: write out userdata to /tmp?
+            pass
+
         
     process_includes(message_from_string(data),parts)
     return parts
