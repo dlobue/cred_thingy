@@ -118,7 +118,7 @@ class user_manager(object):
             deployment = 'no_deployment'
         else:
             traits = chef_attribs.get('traits', [])
-            traits = chef_attribs.get('deployment', 'no_deployment')
+            deployment = chef_attribs.get('deployment', 'no_deployment')
 
         result = iamconn.create_user(instance_id, '/cred_thingy/%s/' % deployment)
         #TODO: check result to ensure user was created successfully
