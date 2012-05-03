@@ -1,4 +1,5 @@
 
+from pprint import pformat
 import logging
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,18 @@ class user_manager(object):
         for ct_user in ct_users:
             instance_id = ct_user[u'user_name']
             try:
-                instance = ec2conn.get_all_instance_status([instance_id])[0]
+                resp = ec2conn.get_all_instance_status([instance_id])
             except boto.exception.EC2ResponseError, e:
                 if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
                     yield instance_id
                 else:
                     raise e
+
+            if len(resp):
+                instance = resp[0]
+            else:
+                logger.debug("instance status response is empty: %s" % pformat(resp))
+                continue
 
             if instance.state_code not in (0,16):
                 yield instance_id
