@@ -57,7 +57,7 @@ def get_asg_userdata(asgname):
     #XXX: don't think this one is needed
     asgconn = boto.connect_autoscale()
     asg = asgconn.get_all_groups(names=[asgname])[0]
-    lc = asgconn.get_all_launch_configurations(names=[asg.launch_config_name])
+    lc = asgconn.get_all_launch_configurations(names=[asg.launch_config_name])[0]
     return lc.user_data
 
 def get_instance_userdata(instance_id):
