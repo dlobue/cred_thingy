@@ -116,10 +116,6 @@ class runner(object):
             pool.spawn(func, message)
 
 
-    def rectify(self):
-        #TODO: find manually launched instances (or should we?)
-        pass
-
     def on_instance_launch(self, message):
         instance_id = message.Message['EC2InstanceId']
         logger.debug("Notified of instance launch for instance %s." % instance_id)
