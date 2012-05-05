@@ -121,7 +121,11 @@ class user_manager(object):
             deployment = chef_attribs.get('deployment', 'no_deployment')
 
         result = iamconn.create_user(instance_id, '/cred_thingy/%s/' % deployment)
-        #TODO: check result to ensure user was created successfully
+        #XXX: result is json. no http status to check. boto should raise an error
+        #XXX: [u'create_user_response'][u'create_user_result'][u'user']
+        #TODO: ensure user_name matches instance_id
+        #TODO: ensure path starts with /cred_thingy and has deployment
+        #TODO: determine how to handle bad/unexpected answers
 
         for group in self.iter_applicable_groups(traits):
             logger.debug("Adding iam user for instance %s to iam group %s" % (instance_id, group))
