@@ -124,7 +124,18 @@ class runner(object):
         message.delete()
 
     def create_creds(self, instance_id):
-        instance = self._ec2conn.get_all_instances([instance_id])[0].instances[0]
+        try:
+            response = self._ec2conn.get_all_instances([instance_id])
+        except boto.exception.EC2ResponseError, e:
+            if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                logger.warn("unable to locate instance %s on aws" % instance_id)
+                return
+
+        if not response:
+            logger.warn("unable to locate instance %s on aws" % instance_id)
+            return
+
+        instance = response[0].instances[0]
 
         if not instance.public_dns_name:
             logger.warn("Instance %s is no longer online" % instance_id)
