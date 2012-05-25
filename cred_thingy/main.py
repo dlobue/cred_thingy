@@ -165,7 +165,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     loggerHandler = logging.StreamHandler(sys.stdout)
     loggerHandler.setLevel(logging.DEBUG)
-    loggerFormatter = logging.Formatter('[%(name)s] [%(funcName)s] [%(thread)d] %(levelname)s: %(message)s')
+    loggerFormatter = logging.Formatter('%(asctime)s [%(name)s] [%(funcName)s] [%(thread)d] %(levelname)s: %(message)s')
     loggerHandler.setFormatter(loggerFormatter)
     logger.addHandler(loggerHandler)
 
