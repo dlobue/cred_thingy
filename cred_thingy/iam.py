@@ -56,7 +56,8 @@ class user_manager(object):
             if len(resp):
                 instance = resp[0]
             else:
-                logger.debug("instance status response is empty: %s" % pformat(resp))
+                logger.debug("instance status response for instance %s is empty: %s" % (instance_id, pformat(resp)))
+                yield instance_id
                 continue
 
             if instance.state_code not in (0,16):
