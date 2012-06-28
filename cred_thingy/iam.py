@@ -90,6 +90,14 @@ class user_manager(object):
             logger.debug("Removing instance user %s from groups %s" % (instance_id, group[u'group_name']))
             self._iamconn.remove_user_from_group(group[u'group_name'], instance_id)
 
+    def _delete_instance_user_policies(self, instance_id):
+        resp = self._iamconn.get_all_user_policies(instance_id)
+        policies = resp[u'list_user_policies_response'][u'list_user_policies_result'][u'policy_names']
+
+        for policy in policies:
+            logger.debug("Deleting user policy %s from instance user %s" % (policy, instance_id))
+            self._iamconn.delete_user_policy(instance_id, policy)
+
     def delete_instance_user(self, instance_id):
         logger.info("Deleting iam user for ec2 instance %s" % instance_id)
         try:
@@ -100,6 +108,7 @@ class user_manager(object):
             else:
                 raise e
         self._delete_instance_groups(instance_id)
+        self._delete_instance_user_policies(instance_id)
         self._iamconn.delete_user(instance_id)
         logger.debug("User for ec2 instance %s deleted" % instance_id)
 
