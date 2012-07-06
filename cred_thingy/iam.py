@@ -20,6 +20,7 @@ class user_manager(object):
         self.group_prefix = group_prefix
         self._iamconn = boto.connect_iam()
         self._ec2conn = boto.connect_ec2()
+        self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
 
     def iter_applicable_groups(self, traits):
         logger.debug("iterating over iam groups that match up with chef traits: %s" % ', '.join(traits))
@@ -39,10 +40,24 @@ class user_manager(object):
 
 
     def iter_dead_instance_accounts(self):
+        return iter([])
+
+    def iter_dead_instance_accounts_fix(self):
         logger.debug("Locating all iam accounts referencing dead instances.")
         resp = self._iamconn.get_all_users('/cred_thingy/')
         ct_users = resp[u'list_users_response'][u'list_users_result'][u'users']
-        ec2conn = self._ec2conn
+        ec2conn = self._ec2conn #TODO: iter through all regions
+        regions = self._ec2conns
+
+        for ec2conn in regions.itervalues():
+            try:
+                ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
+            except boto.exception.EC2ResponseError, e:
+                if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                    continue
+                else:
+                    raise e
+
         for ct_user in ct_users:
             instance_id = ct_user[u'user_name']
             try:
@@ -50,6 +65,7 @@ class user_manager(object):
             except boto.exception.EC2ResponseError, e:
                 if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
                     yield instance_id
+                    #FIXME: AHG
                 else:
                     raise e
 

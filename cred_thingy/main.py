@@ -78,7 +78,8 @@ class runner(object):
         #clean out stale source ips every 30 minutes
         self.pool.spawn(schedule, CLEAN_INTERVAL, self.pool.spawn, self.clean_acl)
         #clear out iam accounts belonging to dead ec2 instances every 60 minutes
-        self.pool.spawn(schedule, CLEAR_DEAD_ACCOUNTS_INTERVAL, self.pool.spawn, self.clear_dead_instance_accounts)
+        #TODO: fix and reenable!
+        #self.pool.spawn(schedule, CLEAR_DEAD_ACCOUNTS_INTERVAL, self.pool.spawn, self.clear_dead_instance_accounts)
         try:
             self.poll_sqs()
         except KeyboardInterrupt:
@@ -198,6 +199,7 @@ class runner(object):
 
     @lock()
     def clear_dead_instance_accounts(self):
+        return
         logger.info("Cleaning out iam accounts belonging to dead instances.")
         self.user_manager.clear_dead_instance_accounts()
 
