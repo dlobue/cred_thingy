@@ -17,6 +17,7 @@ import xtraceback
 xtraceback.compat.install_sys_excepthook()
 
 import boto
+import boto.ec2
 
 from cred_thingy.notifications import JSONMessage
 from cred_thingy.iam import user_manager, CLEAR_DEAD_ACCOUNTS_INTERVAL
@@ -34,8 +35,8 @@ class runner(object):
         self.stop_now = False
         self.bucket = cred_bucket(bucket_name, path_prefix)
         self.queue_name = queue_name
-        self._sqsconn = boto.connect_sqs()
-        self._ec2conn = boto.connect_ec2()
+        self._sqsconn = boto.connect_sqs() #TODO: support sqs queues in other regions
+        self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
         self.pool = Pool(1000)
         self.user_manager = user_manager()
         self._get_queue()
@@ -117,19 +118,52 @@ class runner(object):
 
 
     def on_instance_launch(self, message):
+        #TODO: verify message signature
         instance_id = message.Message['EC2InstanceId']
+        asg_arn = message.Message['AutoScalingGroupARN']
+        region = asg_arn.split(':')[3]
         logger.debug("Notified of instance launch for instance %s." % instance_id)
-        self.create_creds(instance_id)
+        self.create_creds(instance_id, region)
         logger.debug("Deleting launch notice of instance %s" % instance_id)
         message.delete()
 
-    def create_creds(self, instance_id):
-        try:
-            response = self._ec2conn.get_all_instances([instance_id])
-        except boto.exception.EC2ResponseError, e:
-            if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
-                logger.warn("unable to locate instance %s on aws" % instance_id)
-                return
+    def create_creds(self, instance_id, region=None):
+        msg = "Creating creds for instance %s" % instance_id
+        if region:
+            if region in self._ec2conns:
+                msg += " in region %s" % region
+            else:
+                logger.error(("Specified region %s does not exist or "
+                              "is not supported by boto. Will try "
+                              "all regions") % region)
+                region = None
+        logger.info(msg)
+
+        response = None
+
+        if region:
+            try:
+                response = self._ec2conns[region].get_all_instances([instance_id])
+            except boto.exception.EC2ResponseError, e:
+                if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                    logger.warn(("Instance not found in specified "
+                                 "region. Trying the rest"))
+                    response = None
+                else:
+                    raise e
+
+
+        if not response:
+            for ec2conn in self._ec2conns.itervalues():
+                try:
+                    response = ec2conn.get_all_instances([instance_id])
+                    break
+                except boto.exception.EC2ResponseError, e:
+                    if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                        pass
+                    else:
+                        raise
+
 
         if not response:
             logger.warn("unable to locate instance %s on aws" % instance_id)

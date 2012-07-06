@@ -10,12 +10,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 import boto
+import boto.ec2
 try:
     from cloudinit.UserDataHandler import process_includes
 except ImportError:
     from cred_thingy.cloudconfig import process_includes
 
-ec2conn = boto.connect_ec2()
+#ec2conn = boto.connect_ec2()
+
+regions = {region.name: region.connect() for region in boto.ec2.regions()}
 
 class NotCompressed(Exception): pass
 
@@ -86,8 +89,38 @@ def get_asg_userdata(asgname):
     lc = asgconn.get_all_launch_configurations(names=[asg.launch_config_name])[0]
     return lc.user_data
 
-def get_instance_userdata(instance_id):
-    #TODO: iter over all regions until the region the instance belongs to is located.
-    logger.debug("Acquiring userdata for instance %s from aws." % instance_id)
-    return ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
+def get_instance_userdata(instance_id, region=None):
+    msg = "Acquiring userdata from aws for instance %s" % instance_id
+    if region:
+        if region in regions:
+            msg += " in region %s" % region
+        else:
+            logger.warn(("Specified region %s does not exist or "
+                          "is not supported by boto. Will try "
+                          "all regions") % region)
+            region = None
+    logger.debug(msg)
+
+    if region:
+        try:
+            return regions[region].get_instance_attribute(instance_id, 'userData')['userData']
+        except boto.exception.EC2ResponseError, e:
+            if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                logger.warn(("Instance not found in specified "
+                             "region. Trying the rest"))
+            else:
+                raise e
+
+    for ec2conn in regions.itervalues():
+        try:
+            return ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
+        except boto.exception.EC2ResponseError, e:
+            if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
+                continue
+            else:
+                raise e
+
+    logger.error("unable to locate instance %s on aws" % instance_id)
+    raise
+
 
