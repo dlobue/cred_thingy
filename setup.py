@@ -21,6 +21,7 @@ setup(name='cred_thingy',
           "paramiko",
           "boto>=2.0rc1",
           "xtraceback",
+          "PyYAML",
       ],
       entry_points="""
       # -*- Entry points: -*-
