@@ -6,11 +6,20 @@ logger = logging.getLogger(__name__)
 import boto
 
 from cred_thingy.userdata import get_chef_attribs
+from cred_thingy.util import flattener
 
 
 class AlreadyDeleted(Exception): pass
 
 CLEAR_DEAD_ACCOUNTS_INTERVAL = 60 * 60
+
+
+def get_all_instances(regions):
+    reservations = (region.get_all_instances() for region in regions)
+    instances = (reservation.instances for reservation in flattener(reservations))
+
+    return flattener(instances)
+
 
 class user_manager(object):
     default_groups = ['base']
@@ -19,7 +28,6 @@ class user_manager(object):
     def __init__(self, group_prefix='chef'):
         self.group_prefix = group_prefix
         self._iamconn = boto.connect_iam()
-        self._ec2conn = boto.connect_ec2()
         self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
 
     def iter_applicable_groups(self, traits):
@@ -37,46 +45,20 @@ class user_manager(object):
             if group[prefix_len:].strip('-_') in match_list:
                 yield group
 
-
-
     def iter_dead_instance_accounts(self):
-        return iter([])
-
-    def iter_dead_instance_accounts_fix(self):
         logger.debug("Locating all iam accounts referencing dead instances.")
         resp = self._iamconn.get_all_users('/cred_thingy/')
         ct_users = resp[u'list_users_response'][u'list_users_result'][u'users']
-        ec2conn = self._ec2conn #TODO: iter through all regions
         regions = self._ec2conns
 
-        for ec2conn in regions.itervalues():
-            try:
-                ec2conn.get_instance_attribute(instance_id, 'userData')['userData']
-            except boto.exception.EC2ResponseError, e:
-                if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
-                    continue
-                else:
-                    raise e
+        instances = get_all_instances(regions.itervalues())
+        instance_ids = set([ _.id for _ in instances if _.state_code not in (0,16)])
+        #a state code other than 0 or 16 means the instance is dead,
+        #shutting down, or unhealthy
 
         for ct_user in ct_users:
             instance_id = ct_user[u'user_name']
-            try:
-                resp = ec2conn.get_all_instance_status([instance_id])
-            except boto.exception.EC2ResponseError, e:
-                if e.status == 400 and e.error_code == u'InvalidInstanceID.NotFound':
-                    yield instance_id
-                    #FIXME: AHG
-                else:
-                    raise e
-
-            if len(resp):
-                instance = resp[0]
-            else:
-                logger.debug("instance status response for instance %s is empty: %s" % (instance_id, pformat(resp)))
-                yield instance_id
-                continue
-
-            if instance.state_code not in (0,16):
+            if instance_id not in instance_ids:
                 yield instance_id
 
     def clear_dead_instance_accounts(self):

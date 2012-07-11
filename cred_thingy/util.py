@@ -1,5 +1,26 @@
 
 from functools import wraps
+from collections import Iterable
+
+def flattener(*list_of_lists):
+    stack = [list_of_lists]
+    iteree = iter(stack)
+    while 1:
+        try:
+            item = iteree.next()
+        except StopIteration:
+            try:
+                iteree = iter(stack.pop())
+                continue
+            except IndexError:
+                break
+
+        if isinstance(item, Iterable) and not isinstance(item, basestring):
+            stack.append(iteree)
+            iteree = iter(item)
+            continue
+        yield item
+
 
 def memoize_attr(func):
     @wraps(func)
