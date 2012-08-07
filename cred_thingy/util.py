@@ -2,6 +2,8 @@
 from functools import wraps
 from collections import Iterable
 
+from gevent.core import timer
+
 def flattener(*list_of_lists):
     stack = [list_of_lists]
     iteree = iter(stack)
@@ -21,6 +23,11 @@ def flattener(*list_of_lists):
             continue
         yield item
 
+def schedule(time, f, *args, **kwargs):
+    try:
+        f(*args, **kwargs)
+    finally:
+        timer(time, schedule, time, f, *args, **kwargs)
 
 def memoize_attr(func):
     @wraps(func)

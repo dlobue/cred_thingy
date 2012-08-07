@@ -2,7 +2,6 @@
 
 from gevent import monkey, sleep
 monkey.patch_all(httplib=True, thread=True)
-from gevent.core import timer
 
 
 from gevent.pool import Pool
@@ -23,12 +22,8 @@ from cred_thingy.notifications import JSONMessage
 from cred_thingy.iam import user_manager, CLEAR_DEAD_ACCOUNTS_INTERVAL
 from cred_thingy.crypt import encrypt_data, get_host_key
 from cred_thingy.s3 import cred_bucket, CLEAN_INTERVAL, lock
+from cred_thingy.util import schedule
 
-def schedule(time, f, *args, **kwargs):
-    try:
-        f(*args, **kwargs)
-    finally:
-        timer(time, schedule, time, f, *args, **kwargs)
 
 class runner(object):
     def __init__(self, queue_name, bucket_name, path_prefix='instance_creds'):
