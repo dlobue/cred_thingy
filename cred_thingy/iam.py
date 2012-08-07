@@ -52,13 +52,12 @@ class user_manager(object):
         regions = self._ec2conns
 
         instances = get_all_instances(regions.itervalues())
-        instance_ids = set([ _.id for _ in instances if _.state_code not in (0,16)])
-        #a state code other than 0 or 16 means the instance is dead,
-        #shutting down, or unhealthy
+        alive_instance_ids = set([ _.id for _ in instances if _.public_dns_name])
+        # only alive instances have public dns names.
 
         for ct_user in ct_users:
             instance_id = ct_user[u'user_name']
-            if instance_id not in instance_ids:
+            if instance_id not in alive_instance_ids:
                 yield instance_id
 
     def clear_dead_instance_accounts(self):
