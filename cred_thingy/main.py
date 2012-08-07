@@ -203,6 +203,11 @@ class runner(object):
         logger.info("Cleaning out iam accounts belonging to dead instances.")
         self.user_manager.clear_dead_instance_accounts()
 
+    def test_clear_dead_instance_accounts(self):
+        for instance_id in self.user_manager.iter_dead_instance_accounts():
+            print(instance_id)
+
+
     def test_lock(self):
         self.bucket.test_lock()
 
