@@ -9,11 +9,16 @@ from gevent.pool import Pool
 import sys
 import signal
 import logging
+import ConfigParser
+from argparse import ArgumentParser
 
 logger = logging.getLogger('cred_thingy')
 
-import xtraceback
-xtraceback.compat.install_sys_excepthook()
+try:
+    import xtraceback
+    xtraceback.compat.install_sys_excepthook()
+except ImportError:
+    pass
 
 import boto
 import boto.ec2
@@ -22,19 +27,113 @@ from cred_thingy.notifications import JSONMessage
 from cred_thingy.iam import user_manager, CLEAR_DEAD_ACCOUNTS_INTERVAL
 from cred_thingy.crypt import encrypt_data, get_host_key
 from cred_thingy.s3 import cred_bucket, CLEAN_INTERVAL, lock
+from cred_thingy.subcmd import register_subcommand, collect_subcmds_from_class, generate_subcmd_parser
 from cred_thingy.util import schedule
 
 
 class runner(object):
-    def __init__(self, queue_name, bucket_name, path_prefix='instance_creds'):
+
+    default_conf = '/etc/cred_thingy.conf'
+    section = 'core'
+    default_path_prefix = 'instance_creds'
+    default_loglevel = 'debug'
+
+    def read_basic_config(self):
+        self.config_filename = self.options.config_filename
+        cp = ConfigParser.ConfigParser(
+            defaults=dict(
+                path_prefix=self.default_path_prefix,
+                loglevel=self.default_loglevel
+            )
+        )
+        cp.read([self.config_filename])
+        self.config_parser = cp
+
+    def __init__(self):
         self.stop_now = False
-        self.bucket = cred_bucket(bucket_name, path_prefix)
-        self.queue_name = queue_name
+        self.pool = Pool(1000)
+
+
+    def config_logging(self):
+        if self.config_parser.has_option(self.section, 'logconfig'):
+            import logging.config
+            logging.config.fileConfig( self.config_parser.get(self.section, 'logconfig') )
+        else:
+            self._config_logging()
+
+    def _config_logging(self):
+        """Configure the logging module"""
+        loglevel = self.config_parser.get(self.section, 'loglevel')
+        logger.setLevel(logging.DEBUG)
+
+        try:
+            level = int(loglevel)
+        except ValueError:
+            level = int(logging.getLevelName(loglevel.upper()))
+
+
+        handlers = []
+        logfile = None
+        if self.config_parser.has_option(self.section, 'logfile'):
+            logfile = self.config_parser.get(self.section, 'logfile').strip()
+
+        if logfile:
+            handlers.append(logging.FileHandler(logfile))
+        else:
+            handlers.append(logging.StreamHandler(sys.stdout))
+
+        log = logging.getLogger()
+        for h in handlers:
+            #TODO: make configurable
+            h.setLevel(level)
+            h.setFormatter(logging.Formatter(
+                '%(asctime)s [%(name)s] [%(funcName)s] [%(thread)d] %(levelname)s: %(message)s'
+                ))
+            log.addHandler(h)
+
+
+    def _init(self):
         self._sqsconn = boto.connect_sqs() #TODO: support sqs queues in other regions
         self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
-        self.pool = Pool(1000)
         self.user_manager = user_manager()
-        self._get_queue()
+
+    def main(self):
+        """Read the command line and either start or stop the daemon"""
+        ns = self.parse_options()
+        self.read_basic_config()
+        self.config_logging()
+
+        self.bucket = cred_bucket(self.config_parser.get('core', 'bucket_name'),
+                                  self.config_parser.get('core', 'path_prefix'))
+
+        if hasattr(ns, 'action'):
+            action = ns.action
+
+        kwargs = vars(ns).copy()
+        if 'action' in kwargs:
+            del kwargs["action"]
+        del kwargs["config_filename"]
+
+        self._init()
+
+        getattr(self, action)(**kwargs)
+
+
+    def parse_options(self):
+        parser = ArgumentParser()
+        parser.add_argument('-c', '--config_filename',
+                            default=self.default_conf,
+                            help='Specify alternate configuration file name')
+
+        subparsers = parser.add_subparsers(dest='action',
+                                           title='utilities',
+                                           description="direct access to functions for manual use.",
+                                           )
+
+        generate_subcmd_parser(subparsers, collect_subcmds_from_class(self))
+        self.options = ns = parser.parse_args()
+        return ns
+
 
 
     @property
@@ -61,15 +160,23 @@ class runner(object):
         queue = self._sqsconn.get_queue(self.queue_name)
         if queue is None:
             #TODO: determine how best to handle missing sqs queue.
-            print "queue not found."
+            logger.error("queue not found.")
             sys.exit(1)
             #queue = sqsconn.create_queue(queue_name, 60)
         
         queue.set_message_class(JSONMessage)
         self.queue = queue
 
-    def run(self):
+    @register_subcommand
+    def serve(self):
+        '''
+        Start polling SQS for ASG events to act upon.
+        Long running action, runs in forground. This is the default action.
+        **THIS IS THE ONE YOU WANT**
+        '''
         self.add_signal_handlers()
+        self.queue_name = self.config_parser.get('core', 'queue_name')
+        self._get_queue()
         #clean out stale source ips every 30 minutes
         self.pool.spawn(schedule, CLEAN_INTERVAL, self.pool.spawn, self.clean_acl)
         #clear out iam accounts belonging to dead ec2 instances every 60 minutes
@@ -123,7 +230,14 @@ class runner(object):
         logger.debug("Deleting launch notice of instance %s" % instance_id)
         message.delete()
 
+    @register_subcommand
     def create_creds(self, instance_id, region=None):
+        '''
+        Create IAM account and AWS credentials for new (or existing) server
+        that was started manually. This is meant for servers that are not part
+        of an autoscaling group.
+        Requires instance id.
+        '''
         msg = "Creating creds for instance %s" % instance_id
         if region:
             if region in self._ec2conns:
@@ -178,7 +292,12 @@ class runner(object):
         self.bucket.upload_creds(instance_id, encrypted_creds)
         self.bucket.allow_ip(instance.ip_address)
 
+    @register_subcommand
     def delete_creds(self, instance_id):
+        '''
+        Delete credentials and IAM account for a server that has been shutdown.
+        Requires instance id
+        '''
         self.user_manager.delete_instance_user(instance_id)
 
     def on_instance_terminate(self, message):
@@ -188,39 +307,43 @@ class runner(object):
         logger.debug("Deleting termination notice of instance %s" % instance_id)
         message.delete()
 
+    @register_subcommand
     def clean_acl(self):
+        '''
+        Clean old IP addresses from the s3 bucket ACL.
+        '''
         logger.info("Cleaning bucket ACLs")
         self.bucket.clean(delete=True)
 
     @lock()
+    @register_subcommand
     def clear_dead_instance_accounts(self):
+        '''
+        For every cred_thingy managed IAM account, ensure the corresponding
+        instance is alive. If not, delete the IAM account and all credentials.
+        '''
         return
         logger.info("Cleaning out iam accounts belonging to dead instances.")
         self.user_manager.clear_dead_instance_accounts()
 
+    @register_subcommand
     def test_clear_dead_instance_accounts(self):
+        '''
+        list all iam usernames that do not have a matching instance id.
+        '''
         for instance_id in self.user_manager.iter_dead_instance_accounts():
             print(instance_id)
 
 
+    @register_subcommand
     def test_lock(self):
+        '''
+        grab the lock to ensure it works.
+        '''
         self.bucket.test_lock()
 
 
 if __name__ == '__main__':
 
-    logger.setLevel(logging.DEBUG)
-    loggerHandler = logging.StreamHandler(sys.stdout)
-    loggerHandler.setLevel(logging.DEBUG)
-    loggerFormatter = logging.Formatter('%(asctime)s [%(name)s] [%(funcName)s] [%(thread)d] %(levelname)s: %(message)s')
-    loggerHandler.setFormatter(loggerFormatter)
-    logger.addHandler(loggerHandler)
-
-    r = runner(sys.argv[1], sys.argv[2])
-    try:
-        cmd = sys.argv[3]
-    except IndexError:
-        r.run()
-    else:
-        getattr(r, cmd)(*sys.argv[4:])
+    runner().main()
 
