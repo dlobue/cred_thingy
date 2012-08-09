@@ -58,6 +58,7 @@ class user_manager(object):
         for ct_user in ct_users:
             instance_id = ct_user[u'user_name']
             if instance_id not in alive_instance_ids:
+                #dead if missing from the list of alive instances
                 yield instance_id
 
     def clear_dead_instance_accounts(self):
