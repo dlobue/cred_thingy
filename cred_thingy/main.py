@@ -343,7 +343,11 @@ class runner(object):
         self.bucket.test_lock()
 
 
-if __name__ == '__main__':
-
+def run():
     runner().main()
+
+
+if __name__ == '__main__':
+    run()
+
 

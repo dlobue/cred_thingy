@@ -25,5 +25,7 @@ setup(name='cred_thingy',
       ],
       entry_points="""
       # -*- Entry points: -*-
+      [console_scripts]
+      cred_thingy=cred_thingy.main:run
       """,
       )
