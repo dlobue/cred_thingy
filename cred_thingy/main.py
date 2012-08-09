@@ -325,20 +325,13 @@ class runner(object):
         self.user_manager.clear_dead_instance_accounts()
 
     @register_subcommand
-    def test_clear_dead_instance_accounts(self):
+    def list_dead_instance_accounts(self):
         '''
         list all iam usernames that do not have a matching instance id.
         '''
         for instance_id in self.user_manager.iter_dead_instance_accounts():
             print(instance_id)
 
-
-    @register_subcommand
-    def test_lock(self):
-        '''
-        grab the lock to ensure it works.
-        '''
-        self.bucket.test_lock()
 
 
 def run():
