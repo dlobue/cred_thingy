@@ -7,13 +7,18 @@
 - schedule policy cleanups. *DONE*
 - remove iam accounts belonging to ec2 instances that are no longer around. *DONE*
 - documentation
-- add more error handling
+- add more error handling *DONE*
 - add retry mechanism when getting ssh public hostkey *DONE*
 - verify asg notifications are legit using their signatures.
 - need to install s3 object expiration config *DONE*
 - implement backing-off timer
-- implement some timeouts
+- implement some timeouts *DONE*
+- implement global lock timeout
+- add checks to guard against instances being terminated while still provisioning access.
+- add checks to guard against provisioning access for dead instances.
+- add checks to guard against deprovisioning access for instances that were never provisioned.
 - unit tests!
 - figure out how to prevent starvation in global lock.
 - more it more better
+- multi-region support *PARTIAL*
 
