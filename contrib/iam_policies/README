@@ -1,0 +1,5 @@
+
+Policies in the base directory are policies I used in my 'base' policy which is needed by all servers.
+
+Policies in the cred_thingy directory are policies required by cred_thingy in order to work (at a minimum, in deployment configuration).
+

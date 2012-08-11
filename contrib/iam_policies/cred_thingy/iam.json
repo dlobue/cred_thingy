@@ -1,0 +1,23 @@
+{
+   "Statement":[{
+      "Effect":"Allow",
+      "Action":[
+            "iam:AddUserToGroup",
+            "iam:CreateAccessKey",
+            "iam:CreateUser",
+            "iam:DeleteAccessKey",
+            "iam:DeleteUser",
+            "iam:DeleteUserPolicy",
+            "iam:ListAccessKeys",
+            "iam:ListGroups",
+            "iam:ListGroupsForUser",
+            "iam:ListUserPolicies",
+            "iam:ListUsers",
+            "iam:RemoveUserFromGroup"
+          ],
+      "Resource": [
+        "arn:aws:iam::<AWS Account ID>:user/cred_thingy/*",
+        "arn:aws:iam::<AWS Account ID>:group/cred_thingy/*"
+      ]
+   }]
+}

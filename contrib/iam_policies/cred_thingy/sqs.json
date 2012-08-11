@@ -1,0 +1,24 @@
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:ChangeMessageVisibility",
+        "sqs:DeleteMessage"
+      ],
+      "Resource": [
+        "arn:aws:sqs:<region of asg_notifications>:<AWS Account Id>:asg_notifications"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ListQueues"
+      ],
+      "Resource": [
+        "arn:aws:sqs:<region of asg_notifications>:<AWS Account Id>:"
+      ]
+    }
+  ]
+}

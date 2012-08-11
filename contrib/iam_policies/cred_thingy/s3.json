@@ -1,0 +1,24 @@
+{
+   "Statement":[{
+      "Effect":"Allow",
+      "Action":[
+            "s3:PutObject"
+          ],
+      "Resource": [
+        "arn:aws:s3:::<Bucket Name>/instance_creds/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+            "s3:CreateBucket",
+            "s3:GetBucketPolicy",
+            "s3:PutBucketPolicy",
+            "s3:GetLifecycleConfiguration",
+            "s3:PutLifecycleConfiguration"
+          ],
+      "Resource": [
+        "arn:aws:s3:::<Bucket Name>"
+      ]
+   }]
+}
