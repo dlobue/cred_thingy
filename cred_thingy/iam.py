@@ -13,6 +13,9 @@ class AlreadyDeleted(Exception): pass
 CLEAR_DEAD_ACCOUNTS_INTERVAL = 60 * 60
 
 
+def format_path(*segments):
+    return '/' + '/'.join((_.strip('/') for _ in segments)) + '/'
+
 def get_all_instances(regions):
     reservations = (region.get_all_instances() for region in regions)
     instances = (reservation.instances for reservation in flattener(reservations))
@@ -23,30 +26,27 @@ def get_all_instances(regions):
 class user_manager(object):
     default_groups = ['base']
     boto_cred_template = '[Credentials]\naws_access_key_id = {access_key_id}\naws_secret_access_key = {secret_access_key}\n'
+    path_prefix = '/cred_thingy/'
 
-    def __init__(self, group_prefix='chef'):
-        self.group_prefix = group_prefix
+    def __init__(self):
         self._iamconn = boto.connect_iam()
         self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
 
     def iter_applicable_groups(self, traits):
         logger.debug("iterating over iam groups that match up with chef traits: %s" % ', '.join(traits))
-        res = self._iamconn.get_all_groups()
-        groups = res['list_groups_response']['list_groups_result']['groups']
-        groups = (x['group_name'] for x in groups if x['group_name'].startswith(self.group_prefix))
+        res = self._iamconn.get_all_groups(path_prefix=self.path_prefix)
+        groups = (_['group_name'] for _ in res['list_groups_response']['list_groups_result']['groups'])
 
         match_list = list(traits)
         match_list.extend(self.default_groups)
 
-        prefix_len = len(self.group_prefix)
-
         for group in groups:
-            if group[prefix_len:].strip('-_') in match_list:
+            if group in match_list:
                 yield group
 
     def iter_dead_instance_accounts(self):
         logger.debug("Locating all iam accounts referencing dead instances.")
-        resp = self._iamconn.get_all_users('/cred_thingy/')
+        resp = self._iamconn.get_all_users(path_prefix=self.path_prefix)
         ct_users = resp[u'list_users_response'][u'list_users_result'][u'users']
         regions = self._ec2conns
 
@@ -127,7 +127,7 @@ class user_manager(object):
             traits = chef_attribs.get('traits', [])
             deployment = chef_attribs.get('deployment', 'no_deployment')
 
-        result = iamconn.create_user(instance_id, '/cred_thingy/%s/' % deployment)
+        result = iamconn.create_user(instance_id, format_path(self.path_prefix, deployment))
         #XXX: result is json. no http status to check. boto should raise an error
         #XXX: [u'create_user_response'][u'create_user_result'][u'user']
         #TODO: ensure user_name matches instance_id
