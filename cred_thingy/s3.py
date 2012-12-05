@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 from boto.s3.lifecycle import Rule, Lifecycle as _Lifecycle
 import boto, boto.s3.lifecycle
+from boto.sdb import connect_to_region as sdb_connect_to_region
 
 from cred_thingy.util import memoize_attr, Singleton
 
@@ -63,12 +64,12 @@ class cred_bucket(Singleton):
     policy_statement_id = "instance_creds"
     policy_version = "2008-10-17"
 
-    def __init__(self, bucket_name, path_prefix='instance_creds'):
-        self._conn = boto.connect_s3() #TODO: add support for different regions
+    def __init__(self, bucket_name, path_prefix='instance_creds', region=None):
+        self._conn = boto.connect_s3()
         self.name = bucket_name
         self.path_prefix = path_prefix.strip('/*')
         self._get_bucket()
-        self._metadata = policy_metadata()
+        self._metadata = policy_metadata(region)
         self._lock = LockR(self._metadata._domain)
 
     def _get_bucket(self):
@@ -240,10 +241,9 @@ class cred_bucket(Singleton):
 
 
 class policy_metadata(object):
-    def __init__(self, domain_name='cred_thingy'):
+    def __init__(self, domain_name='cred_thingy', region=None):
         self.domain_name = domain_name
-        self._conn = boto.connect_sdb() #TODO: add support for different regions
-                                        #need to sync up sdb and s3 regions
+        self._conn = sdb_connect_to_region(region) if region else boto.connect_sdb()
         try:
             self._domain = self._conn.get_domain(domain_name)
         except boto.exception.SDBResponseError, e:

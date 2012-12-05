@@ -22,6 +22,7 @@ except ImportError:
 
 import boto
 import boto.ec2
+from boto.sqs import connect_to_region as sqs_connect_to_region
 
 from cred_thingy.notifications import JSONMessage
 from cred_thingy.iam import user_manager, CLEAR_DEAD_ACCOUNTS_INTERVAL
@@ -37,13 +38,15 @@ class runner(object):
     section = 'core'
     default_path_prefix = 'instance_creds'
     default_loglevel = 'debug'
+    default_region = 'us-east-1'
 
     def read_basic_config(self):
         self.config_filename = self.options.config_filename
         cp = ConfigParser.ConfigParser(
             defaults=dict(
                 path_prefix=self.default_path_prefix,
-                loglevel=self.default_loglevel
+                loglevel=self.default_loglevel,
+                region=self.default_region,
             )
         )
         cp.read([self.config_filename])
@@ -93,7 +96,8 @@ class runner(object):
 
 
     def _init(self):
-        self._sqsconn = boto.connect_sqs() #TODO: support sqs queues in other regions
+        region = self.config_parser.get('core', 'region')
+        self._sqsconn = sqs_connect_to_region(region) if region else boto.connect_sqs()
         self._ec2conns = {region.name: region.connect() for region in boto.ec2.regions()}
         self.user_manager = user_manager()
 
@@ -104,7 +108,8 @@ class runner(object):
         self.config_logging()
 
         self.bucket = cred_bucket(self.config_parser.get('core', 'bucket_name'),
-                                  self.config_parser.get('core', 'path_prefix'))
+                                  path_prefix=self.config_parser.get('core', 'path_prefix'),
+                                  region=self.config_parser.get('core', 'region'))
 
         if hasattr(ns, 'action'):
             action = ns.action
