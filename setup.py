@@ -19,7 +19,7 @@ setup(name='cred_thingy',
       install_requires=[
           "gevent>=0.13.6",
           "paramiko",
-          "boto>=2.0rc1",
+          "boto==2.2.2",
           "xtraceback",
           "PyYAML",
       ],
