@@ -1,7 +1,6 @@
 {
   "Statement": [
     {
-      "Sid": "Stmt1329950026733",
       "Action": [
         "sdb:BatchDeleteAttributes",
         "sdb:BatchPutAttributes",
